@@ -187,12 +187,12 @@ func testGetRoots(h http.Handler) func(*testing.T) {
 				name: "myOtherRoot",
 				expectedRoots: []amznode.Node{
 					amznode.Node{
-						ID:     1,
-						Name:   "myRoot",
-						RootID: 1,
+						ID:     2,
+						Name:   "myOtherRoot",
+						RootID: 2,
 					},
 					amznode.Node{
-						ID:     2,
+						ID:     1,
 						Name:   "myRoot",
 						RootID: 1,
 					},
@@ -203,7 +203,7 @@ func testGetRoots(h http.Handler) func(*testing.T) {
 		for i, test := range tests {
 			t.Run(strconv.Itoa(i), func(t *testing.T) {
 				r = sendRequest(t, h, "POST", fmt.Sprintf("/%s", test.name))
-				assert.Equal(t, http.StatusOK, r.StatusCode)
+				assert.Equal(t, http.StatusCreated, r.StatusCode)
 				r = sendRequest(t, h, "GET", "/")
 				assertListResponse(t, r, http.StatusOK, test.expectedRoots)
 			})

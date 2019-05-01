@@ -34,15 +34,17 @@ func (s *server) getHandler() http.HandlerFunc {
 			respondErr(w, r, err, http.StatusBadRequest)
 			return
 		}
+
 		if id == 0 {
-			roots, err := s.storage.GetRoots()
+			nodes, err := s.storage.GetRoots()
 			if err != nil {
 				handleStorageError(w, r, err)
 				return
 			}
-			respond(w, r, roots, http.StatusOK)
+			respond(w, r, nodes, http.StatusOK)
 			return
 		}
+
 		node, err := s.storage.Get(id)
 		if err != nil {
 			handleStorageError(w, r, err)

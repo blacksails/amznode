@@ -15,7 +15,7 @@ clean-go:
 clean-binary:
 	rm -f $(BINARY)
 clean-compose:
-	docker-compose stop
+	docker-compose down
 
 run:
 	go run ./cmd/$(BINARY)/main.go

@@ -72,7 +72,7 @@ func (s *server) changeParentHandler() http.HandlerFunc {
 			return
 		}
 
-		respond(w, r, nil, http.StatusOK)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -89,6 +89,6 @@ func (s *server) deleteHandler() http.HandlerFunc {
 			return
 		}
 
-		respond(w, r, nil, http.StatusOK)
+		w.WriteHeader(http.StatusOK)
 	}
 }

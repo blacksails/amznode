@@ -68,36 +68,48 @@ func (s *Storage) Get(id int) (*amznode.Node, error) {
 
 	rows, err := s.db.Query(q, id)
 	defer rows.Close()
-
 	if err != nil {
 		return nil, err
 	}
 
-	return buildTree(id, rows)
+	_, nodesByID, err := loadRawNodes(rows)
+	node, ok := nodesByID[id]
+	if !ok {
+		return nil, amznode.NewErrNotFound(id)
+	}
+	return node, nil
 }
 
 // GetRoots implements `amznode.Storage.GetRoots`
 func (s *Storage) GetRoots() ([]*amznode.Node, error) {
 	t := s.table()
 	q := fmt.Sprintf(`
-		WITH roots AS (
+		WITH q AS (
 			SELECT * 
 			FROM %s
-			WHERE parentID = NULL
+			WHERE parentID IS NULL
 		)
-		SELECT * FROM roots
+		SELECT * FROM q
 		UNION ALL
-		SELECT * FROM %s WHERE parentID IN (SELECT id FROM roots)
+		SELECT * FROM %s WHERE parentID IN (SELECT id FROM q)
 	`, t, t)
 
 	rows, err := s.db.Query(q)
 	defer rows.Close()
-
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	rootIDs, nodesByID, err := loadRawNodes(rows)
+	roots := make([]*amznode.Node, len(rootIDs))
+	for i, id := range rootIDs {
+		roots[i] = nodesByID[id]
+	}
+	sort.SliceStable(roots, func(i, j int) bool {
+		return roots[i].Name < roots[j].Name
+	})
+
+	return roots, nil
 }
 
 // ErrInvalidTree is returned when the data in the database couldn't be parsed
@@ -105,58 +117,65 @@ func (s *Storage) GetRoots() ([]*amznode.Node, error) {
 // never happen.
 var ErrInvalidTree = errors.New("invalid tree")
 
-func buildTree(id int, rows *sql.Rows) (*amznode.Node, error) {
-	var root node
-	if !rows.Next() {
-		return nil, amznode.NewErrNotFound(id)
-	}
-	if err := rows.Scan(&root.id, &root.parentID, &root.name); err != nil {
-		return nil, err
-	}
-	aroot := root.ToDomain()
-	aroot.RootID = aroot.ID
-	nodesByID := map[int]*amznode.Node{root.id: aroot}
+func loadRawNodes(rows *sql.Rows) ([]int, map[int]*amznode.Node, error) {
+	rootIDs := []int{}
+	nodesByID := map[int]*amznode.Node{}
+
+	// Load rows from SQL to domain Nodes
 	for rows.Next() {
 		var n node
 		if err := rows.Scan(&n.id, &n.parentID, &n.name); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		an := n.ToDomain()
-		an.RootID = aroot.ID
 		nodesByID[n.id] = an
 	}
 
+	// Register rootIDs and set children
 	for _, node := range nodesByID {
 		if node.IsRoot() {
+			rootIDs = append(rootIDs, node.ID)
+			node.RootID = node.ID
 			continue
 		}
 		parent, ok := nodesByID[node.ParentID]
 		if !ok {
-			return nil, ErrInvalidTree
+			return nil, nil, ErrInvalidTree
 		}
 		parent.Children = append(parent.Children, node)
-		// this sort is mostly here to ensure deterministic behavior, which
-		// makes testing easier.
-		sort.SliceStable(parent.Children, func(i, j int) bool {
-			return parent.Children[i].Name < parent.Children[j].Name
-		})
 	}
 
-	setHeight(nodesByID[root.id], 0)
+	// Recursively build nodes
+	for _, rootID := range rootIDs {
+		node := nodesByID[rootID]
+		if node.IsRoot() {
+			buildRootNode(node)
+		}
+	}
 
-	return nodesByID[id], nil
+	return rootIDs, nodesByID, nil
 }
 
-func setHeight(node *amznode.Node, height int) {
-	node.Height = height
+func buildRootNode(rootNode *amznode.Node) {
 	var wg sync.WaitGroup
-	for _, child := range node.Children {
-		wg.Add(1)
-		go func(node *amznode.Node) {
-			defer wg.Done()
-			setHeight(node, height+1)
-		}(child)
+	var auxFunc func(node *amznode.Node, height int)
+	auxFunc = func(node *amznode.Node, height int) {
+		node.Height = height
+		node.RootID = rootNode.ID
+		// this sort is mostly here to ensure deterministic behavior, which
+		// makes testing easier.
+		sort.SliceStable(node.Children, func(i, j int) bool {
+			return node.Children[i].Name < node.Children[j].Name
+		})
+		for _, child := range node.Children {
+			wg.Add(1)
+			go func(node *amznode.Node) {
+				defer wg.Done()
+				auxFunc(node, height+1)
+			}(child)
+		}
 	}
+	auxFunc(rootNode, 0)
 	wg.Wait()
 }
 

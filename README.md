@@ -261,3 +261,15 @@ $ curl -X GET -s "http://localhost:8080/" | jq
   }
 ]
 ```
+
+## Final notes
+
+- It wasen't required to support multiple roots, implemented that for fun.
+- If I was to do more, I would make an easier API which could create a path
+  of nodes at once, a bit like `mkdir -p`. This API could also be extended to
+  the other methods, so that you could address a node by its path instead of
+  the id.
+- I would add an `r` option for the get methods, which would recursively fetch
+  all children and not just the immediate ones. The code for building the node
+  tree from SQL rows already supports this, so it might just be a matter of
+  changing the query slighty.

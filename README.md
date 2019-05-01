@@ -235,7 +235,6 @@ Lets delete a node or actually an entire tree, and then get the root nodes:
 
 ```
 $ curl -X DELETE "http://localhost:8080/2"
-"OK"
 $ curl -X GET -s "http://localhost:8080/" | jq
 [
   {
